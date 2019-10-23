@@ -10,6 +10,12 @@ pipeline {
         sh "docker pull golang:1.12"
         sh "docker-compose -f docker-compose.build.yml -p coredns_build run build"
       }
+
+      post {
+        success { 
+          archiveArtifacts artifacts: "coredns", fingerprint: true
+        }
+      }
     }
 
     stage('Test') {
