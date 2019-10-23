@@ -1,0 +1,12 @@
+version: '2'
+services:
+    build:
+      image: golang:1.12
+      volumes:
+        - ./:/v
+      working_dir: /v
+      command: >
+        bash -c "
+        go mod vendor &&
+        make
+        "
