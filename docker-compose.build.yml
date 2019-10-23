@@ -5,8 +5,4 @@ services:
       volumes:
         - ./:/v
       working_dir: /v
-      command: >
-        bash -c "
-        go mod vendor &&
-        make
-        "
+      entrypoint: bash -c "GOFLAGS=-mod=vendor make"

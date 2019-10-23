@@ -15,4 +15,4 @@ coverage.txt
 .settings/**
 build/
 release/
-vendor
+
