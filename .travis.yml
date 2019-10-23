@@ -14,9 +14,9 @@ go_import_path: github.com/coredns/coredns
 git:
   depth: 1
 
-branches:
-  only:
-  - master
+# branches:
+#   only:
+#   - master
 
 env:
   global:
