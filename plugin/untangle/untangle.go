@@ -30,8 +30,6 @@ type Untangle struct {
 	Next          plugin.Handler
 	DaemonAddress string
 	DaemonPort    int
-	BlockFour     string
-	BlockSix      string
 }
 
 type Category struct {

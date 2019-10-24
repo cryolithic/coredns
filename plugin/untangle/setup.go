@@ -25,13 +25,16 @@ var (
 func init() { plugin.Register("untangle", setup) }
 
 func setup(c *caddy.Controller) error {
-	addr, port, block4, block6, err := parse(c)
+	addr, port, err := parse(c)
 	if err != nil {
 		return plugin.Error("untangle", err)
 	}
 
+	// initialize the policy stuff
+	initializePolicy()
+
 	dnsserver.GetConfig(c).AddPlugin(func(next plugin.Handler) plugin.Handler {
-		return Untangle{Next: next, DaemonAddress: addr, DaemonPort: port, BlockFour: block4, BlockSix: block6}
+		return Untangle{Next: next, DaemonAddress: addr, DaemonPort: port}
 	})
 
 	once.Do(func() {
@@ -41,18 +44,18 @@ func setup(c *caddy.Controller) error {
 	return nil
 }
 
-func parse(c *caddy.Controller) (string, int, string, string, error) {
+func parse(c *caddy.Controller) (string, int, error) {
 	for c.Next() {
 		args := c.RemainingArgs()
 		if len(args) != 4 {
 			log.Warningf("Invalid arguments. Using defaults\n")
-			return "127.0.0.1", 8484, "0.1.2.3", "1:2:3:4::1234", nil
+			return "127.0.0.1", 8484, nil
 		}
 		port, _ := strconv.Atoi(args[1])
 		log.Debugf("ADDR:%v PORT:%v BLOCK4:%v BLOCK6:%v\n", args[0], port, args[2], args[3])
-		return args[0], port, args[2], args[3], nil
+		return args[0], port, nil
 	}
 
 	log.Warningf("Missing arguments. Using defaults\n")
-	return "127.0.0.1", 8484, "0.1.2.3", "1:2:3:4::1234", nil
+	return "127.0.0.1", 8484, nil
 }
