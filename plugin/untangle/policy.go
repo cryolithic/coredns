@@ -9,11 +9,32 @@
 package untangle
 
 import (
+    "io/ioutil"
+	"fmt"
 	"sync"
 	"time"
+    "os"
 
+    "strings"
+    "encoding/json"
+    "path/filepath"
 	"github.com/coredns/coredns/plugin/pkg/log"
 )
+
+type Policy struct {
+    Ipv4Addrs []string
+    Ipv6Addrs []string
+    BlockCategories []int
+    BlockReputation int
+    RedirectIp string
+}
+
+type Configuration struct {
+//    Next          plugin.Handler
+    Version       int
+    CustomerId    string
+    Policies      []Policy
+}
 
 type policyHolder struct {
 	timestamp         time.Time
@@ -26,18 +47,75 @@ type policyHolder struct {
 var policyTable map[string]*policyHolder
 var policyMutex sync.RWMutex
 
+func getDnsConfigurationFiles() []string {
+    var files []string
+
+    root := "/etc/dnsproxy"
+    err := filepath.Walk(root, func(path string, info os.FileInfo, err error) error {
+        // fmt.Printf(path)
+        if strings.HasSuffix(path, ".json"){
+            files = append(files, path)
+        }
+        return nil
+    })
+    if err != nil {
+        panic(err)
+    }
+    return files    
+}
+
 func initializePolicy() {
 	policyTable = make(map[string]*policyHolder)
 
-	dummy := new(policyHolder)
-	dummy.networkAddress = "192.168.10.1"
-	dummy.timestamp = time.Now()
-	dummy.minimumReputation = 20
-	dummy.blockCategories = append(dummy.blockCategories, 2)
-	dummy.blockCategories = append(dummy.blockCategories, 4)
-	dummy.blockCategories = append(dummy.blockCategories, 6)
+	// dummy := new(policyHolder)
+	// dummy.networkAddress = "192.168.10.1"
+	// dummy.timestamp = time.Now()
+	// dummy.minimumReputation = 20
+	// dummy.blockCategories = append(dummy.blockCategories, 2)
+	// dummy.blockCategories = append(dummy.blockCategories, 4)
+	// dummy.blockCategories = append(dummy.blockCategories, 6)
 
-	policyTable[dummy.networkAddress] = dummy
+	// policyTable[dummy.networkAddress] = dummy
+
+
+    var customer Configuration
+    for _, file := range getDnsConfigurationFiles() {
+        // fmt.Println(file)
+
+        // fmt.Println("Open... " + file)
+        // Open our jsonFile
+        jsonFile, err := os.Open(file)
+        // if we os.Open returns an error then handle it
+        if err != nil {
+            fmt.Println(err)
+        }
+        // fmt.Println("Successfully opened " + file)
+        byteValue, _ := ioutil.ReadAll(jsonFile)
+        // fmt.Println("Successfully read " + file)
+        // defer the closing of our jsonFile so that we can parse it later on
+        defer jsonFile.Close()
+
+        json.Unmarshal(byteValue, &customer)
+        // fmt.Print(customer)
+        // fmt.Print(customer.CustomerId)
+        for _, policy := range customer.Policies{
+            // fmt.Print(policy)
+            for _, ipv4addr := range policy.Ipv4Addrs{
+                fmt.Print(ipv4addr)
+				pluginPolicy := new(policyHolder)
+				pluginPolicy.networkAddress = ipv4addr
+				pluginPolicy.minimumReputation = policy.BlockReputation
+				for _, category := range policy.BlockCategories{
+					pluginPolicy.blockCategories = append(pluginPolicy.blockCategories, category)
+				}
+				pluginPolicy.blockServer = policy.RedirectIp
+
+				policyTable[pluginPolicy.networkAddress] = pluginPolicy
+            }
+        }
+    }
+
+
 }
 
 func checkPolicy(name string, client string, filter *Response) string {
