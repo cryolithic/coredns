@@ -10,7 +10,7 @@ import (
 	"time"
 
 	"github.com/coredns/coredns/plugin"
-	//	"github.com/coredns/coredns/plugin/pkg/log"
+	"github.com/coredns/coredns/plugin/pkg/log"
 	"github.com/coredns/coredns/request"
 	"github.com/miekg/dns"
 )
@@ -42,17 +42,17 @@ type Response struct {
 // ServeDNS implements the plugin.Handler interface.
 func (ut Untangle) ServeDNS(ctx context.Context, w dns.ResponseWriter, r *dns.Msg) (int, error) {
 	state := request.Request{W: w, Req: r}
+	// we only care about queries with INET class
 	if state.QClass() != dns.ClassINET {
-		fmt.Printf("We only care about class=IN queries\n")
 		return plugin.NextOrFailure(ut.Name(), ut.Next, ctx, w, r)
 	}
 
+	// we only care about queries for A and AAAA records
 	if state.QType() != dns.TypeA && state.QType() != dns.TypeAAAA {
-		fmt.Printf("We only care about A and AAAA queries\n")
 		return plugin.NextOrFailure(ut.Name(), ut.Next, ctx, w, r)
 	}
 
-	fmt.Printf("QUERY RECEIVED:%s\n", state.QName())
+	log.Debugf("QUERY: %v\n", state)
 
 	blocked := false
 	daemon := fmt.Sprintf("%s:%d", ut.DaemonAddress, ut.DaemonPort)
@@ -102,25 +102,27 @@ func (ut Untangle) Name() string { return "untangle" }
 func filterLookup(qname string, server string) (*Response) {
 	var response []Response
 
-	fmt.Printf("LOOKUP:%s DAEMON:%s\n", qname, server)
-
 	// connect to this socket
 	conn, err := net.DialTimeout("tcp", server, time.Second)
 	if err != nil {
-		fmt.Printf("Unable to connect to daemon:%s\n", server)
+		log.Errorf("Error connecting to daemon %s: %v\n", server, err)
 		return nil
 	}
 
 	// send to socket
-	fmt.Fprintf(conn, "{\"url/getinfo\":{\"urls\":[\"" + qname + "\"],\"a1cat\":1, \"reputation\":1}}" + "\r\n")
+	command := fmt.Sprintf("{\"url/getinfo\":{\"urls\":[\"" + qname + "\"],\"a1cat\":1, \"reputation\":1}}" + "\r\n")
+	log.Debugf("DAEMON COMMAND: %s\n", command)
+	conn.Write([]byte(command))
 
 	// listen for reply
-	message, _ := bufio.NewReader(conn).ReadString('\n')
-	fmt.Print("Message from server: "+message)
-	json.Unmarshal([]byte(message), &response)
+	message, err := bufio.NewReader(conn).ReadString('\n')
+	if err != nil {
+		log.Errorf("Error reading from daemon: %v\n", err)
+		return nil
+	}
 
-	// fmt.Println(err)
-	fmt.Printf("Stuff: %v\n", response)
+	log.Debug("DAEMON RESPONSE: %s\n", message)
+	json.Unmarshal([]byte(message), &response)
 
 	return &response[0]
 }
