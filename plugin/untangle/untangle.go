@@ -114,6 +114,9 @@ func filterLookup(qname string, server string) *Response {
 		return nil
 	}
 
+	// make sure the socket is closed
+	defer conn.Close()
+
 	// send to socket
 	command := fmt.Sprintf("{\"url/getinfo\":{\"urls\":[\"" + qname + "\"],\"a1cat\":1, \"reputation\":1}}" + "\r\n")
 	log.Debugf("DAEMON COMMAND: %s\n", command)
@@ -126,7 +129,7 @@ func filterLookup(qname string, server string) *Response {
 		return nil
 	}
 
-	log.Debug("DAEMON RESPONSE: %s\n", message)
+	log.Debugf("DAEMON RESPONSE: %s\n", message)
 	json.Unmarshal([]byte(message), &response)
 
 	return &response[0]
