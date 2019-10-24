@@ -9,12 +9,17 @@ package untangle
 
 import (
 	"strconv"
+	"sync"
 
 	"github.com/coredns/coredns/core/dnsserver"
 	"github.com/coredns/coredns/plugin"
 	"github.com/coredns/coredns/plugin/pkg/log"
 
 	"github.com/caddyserver/caddy"
+)
+
+var (
+	once sync.Once
 )
 
 func init() { plugin.Register("untangle", setup) }
@@ -27,6 +32,10 @@ func setup(c *caddy.Controller) error {
 
 	dnsserver.GetConfig(c).AddPlugin(func(next plugin.Handler) plugin.Handler {
 		return Untangle{Next: next, DaemonAddress: addr, DaemonPort: port, BlockFour: block4, BlockSix: block6}
+	})
+
+	once.Do(func() {
+		caddy.RegisterEventHook("untangle", hook)
 	})
 
 	return nil
