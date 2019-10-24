@@ -1,4 +1,10 @@
-// Package untangle implements a plugin that does query filtering
+/*
+ * untangle.go
+ * This is the main query handling code for the Untangle DNS filter proxy
+ * We lookup the reputation and categories for inbound queries and then
+ * consult the customer policy to make the allow or block decision.
+ */
+
 package untangle
 
 import (
@@ -52,28 +58,27 @@ func (ut Untangle) ServeDNS(ctx context.Context, w dns.ResponseWriter, r *dns.Ms
 		return plugin.NextOrFailure(ut.Name(), ut.Next, ctx, w, r)
 	}
 
-	log.Debugf("QUERY: %v\n", state)
+	log.Debugf("QUERY: name:%s client:%s\n", state.Name(), state.IP())
 
-	blocked := false
+	// pass the query name to the filterLookup function
 	daemon := fmt.Sprintf("%s:%d", ut.DaemonAddress, ut.DaemonPort)
-	filter := filterLookup(state.QName(), daemon)
+	filter := filterLookup(state.Name(), daemon)
 
-	if filter != nil {
-	if filter.Reputation > 20 {
-		blocked = false
-	} else {
-		blocked = true
-	}
-	}
-
-	if state.Name() == "block.this." {
-		blocked = true
-	}
-
-	if blocked == false {
+	// if we get nothing from the filter we are done
+	if filter == nil {
 		return plugin.NextOrFailure(ut.Name(), ut.Next, ctx, w, r)
 	}
 
+	// pass the name, client, and policy result to the checkPolicy function
+	// and get back the address of the block server or nil to allow
+	blocker := checkPolicy(state.Name(), state.IP(), filter)
+
+	// emtpy result from checkPolicy means we allow the query
+	if len(blocker) == 0 {
+		return plugin.NextOrFailure(ut.Name(), ut.Next, ctx, w, r)
+	}
+
+	// checkPolicy gave us a result so we need to block the query
 	a := new(dns.Msg)
 	a.SetReply(r)
 	a.Authoritative = true
@@ -82,13 +87,13 @@ func (ut Untangle) ServeDNS(ctx context.Context, w dns.ResponseWriter, r *dns.Ms
 	if state.QType() == dns.TypeA {
 		rr = new(dns.A)
 		rr.(*dns.A).Hdr = dns.RR_Header{Name: state.QName(), Rrtype: dns.TypeA, Class: state.QClass()}
-		rr.(*dns.A).A = net.ParseIP(ut.BlockFour).To4()
+		rr.(*dns.A).A = net.ParseIP(blocker).To4()
 		a.Answer = []dns.RR{rr}
 	}
 	if state.QType() == dns.TypeAAAA {
 		rr = new(dns.AAAA)
 		rr.(*dns.AAAA).Hdr = dns.RR_Header{Name: state.QName(), Rrtype: dns.TypeAAAA, Class: state.QClass()}
-		rr.(*dns.AAAA).AAAA = net.ParseIP(ut.BlockSix)
+		rr.(*dns.AAAA).AAAA = net.ParseIP(blocker)
 		a.Answer = []dns.RR{rr}
 	}
 
@@ -99,7 +104,7 @@ func (ut Untangle) ServeDNS(ctx context.Context, w dns.ResponseWriter, r *dns.Ms
 // Name implements the Handler interface.
 func (ut Untangle) Name() string { return "untangle" }
 
-func filterLookup(qname string, server string) (*Response) {
+func filterLookup(qname string, server string) *Response {
 	var response []Response
 
 	// connect to this socket
