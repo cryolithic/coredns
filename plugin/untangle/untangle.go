@@ -15,6 +15,7 @@ import (
 	"net"
 	"time"
 
+    "github.com/fsnotify/fsnotify"
 	"github.com/coredns/coredns/plugin"
 	"github.com/coredns/coredns/plugin/pkg/log"
 	"github.com/coredns/coredns/request"
@@ -138,9 +139,9 @@ func hook(event caddy.EventName, info interface{}) error {
 		return nil
 	}
 
+	instance := info.(*caddy.Instance)
 	// this should be an instance. ok to panic if not
 	/*
-	instance := info.(*caddy.Instance)
 
 	go func() {
 		tick := time.NewTicker(10 * time.Second)
@@ -162,6 +163,49 @@ func hook(event caddy.EventName, info interface{}) error {
 		}
 	}()
 	*/
+
+    // creates a new file watcher
+    watcher, err := fsnotify.NewWatcher()
+    if err != nil {
+        fmt.Println("ERROR", err)
+    }
+    defer watcher.Close()
+
+    //
+    done := make(chan bool)
+
+    //
+    go func() {
+        for {
+            select {
+            // watch for events
+            case event := <-watcher.Events:
+                fmt.Printf("EVENT! %#v\n", event)
+				corefile, err := caddy.LoadCaddyfile(instance.Caddyfile().ServerType())
+				if err != nil {
+					continue
+				}
+				_, err = instance.Restart(corefile)
+				if err != nil {
+					log.Errorf("Corefile changed but reload failed: %s", err)
+					continue
+				}
+
+
+            // watch for errors
+            case err := <-watcher.Errors:
+                fmt.Println("ERROR", err)
+            }
+        }
+    }()
+
+    // out of the box fsnotify can watch a single file, or a single directory
+    if err := watcher.Add("/etc/dnsproxy"); err != nil {
+        fmt.Println("ERROR", err)
+    }
+
+    <-done
+
 
 	return nil
 }
