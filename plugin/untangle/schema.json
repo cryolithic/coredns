@@ -1,0 +1,49 @@
+{
+    "$schema": "http://json-schema.org/draft-06/schema#",
+    "description": "schema for dns filter settings",
+    "type": "object",
+    "required": ["version","customerId","policies"],
+    "properties": {
+        "version": {
+            "type": "integer",
+            "minimum": 1
+        },
+        "customerId": {
+            "description": "A unique customer identifier",
+            "type": "string"
+        },
+        "policies": {
+            "description": "The list of dns filter policies to apply to this customer",
+            "type": "array",
+            "items": { "$ref": "#/definitions/policy_settings" }
+        }
+    },
+    "definitions": {
+        "policy_settings": {
+            "ipv4Addrs": {
+		    "description": "List of ipv4 source addresses for this policy",
+		    "type": "array",
+		    "items": { "type": "string" }
+            },
+            "ipv6Addrs": {
+		    "description": "List of ipv6 source addresses for this policy",
+		    "type": "array",
+		    "items": { "type": "string" }
+            },
+	    "blockCategories": {
+		    "description": "List of categores to block",
+		    "type": "array",
+		    "items": { "type": "integer" }
+            },
+	    "blockReputation": {
+	        "description": "Reputation block threshold",
+                "type": "integer"
+            },
+	    "redirectIp": {
+	        "description": "The ip address to return for blocked requests",
+                "type": "string"
+            }
+
+        }
+    }
+}
